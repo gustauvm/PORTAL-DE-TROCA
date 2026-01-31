@@ -224,6 +224,9 @@
 
 <script>
     const grupoSelecionado = localStorage.getItem('grupoSelecionado');
+    if (!grupoSelecionado) {
+        window.location.replace('./gateway.html');
+    }
 
     const csvSources = {
         'bombeiros': 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS29f9zGs72Lf557GYyR3H601ZXF94CHAejfp_mUnIbqESE7NFTvzxNQF9eyvMDROC4HZDEtWnSHRbx/pub?output=csv',
@@ -266,6 +269,7 @@
     const rawCsvUrl = csvSources[grupoSelecionado] || csvSources['bombeiros'];
     const CSV_URL = `${rawCsvUrl}&t=${Date.now()}`;
     const PROXY_URL = 'https://corsproxy.io/?' + encodeURIComponent(CSV_URL);
+    const PROXY_URL_FALLBACK = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(CSV_URL);
 
     let db = {}; 
 
@@ -294,15 +298,29 @@
 
     window.onload = async function() {
         try {
-            const response = await fetch(PROXY_URL);
-            if (!response.ok) throw new Error("Erro na rede");
-            const data = await response.text();
+            let response = await fetch(PROXY_URL);
+            if (!response.ok) throw new Error("Erro na rede (proxy)");
+            let data = await response.text();
             processarCSV(data);
-            document.getElementById('loading-overlay').style.display = 'none';
         } catch (error) {
-            console.error("Erro:", error);
+            try {
+                let response = await fetch(PROXY_URL_FALLBACK);
+                if (!response.ok) throw new Error("Erro na rede (proxy 2)");
+                let data = await response.text();
+                processarCSV(data);
+            } catch (errorProxy2) {
+                try {
+                    let response = await fetch(CSV_URL);
+                    if (!response.ok) throw new Error("Erro na rede (direto)");
+                    let data = await response.text();
+                    processarCSV(data);
+                } catch (errorDirect) {
+                    console.error("Erro:", error, errorProxy2, errorDirect);
+                    alert("Erro de conexão.");
+                }
+            }
+        } finally {
             document.getElementById('loading-overlay').style.display = 'none';
-            alert("Erro de conexão.");
         }
     };
 
@@ -372,6 +390,9 @@
                 }
             });
         }
+
+        if (document.getElementById('re_sol').value) buscar('sol');
+        if (document.getElementById('re_sub').value) buscar('sub');
     }
 
     function buscar(tipo) {
